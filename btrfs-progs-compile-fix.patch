@@ -1,0 +1,58 @@
+Rawhide is getting cranky with posix compliance, and a few
+things have stopped building.
+
+getpagesize() is now only available -with- __USE_XOPEN_EXTENDED
+or __USE_BSD, and NOT __USE_XOPEN2K.
+
+_GNU_SOURCE must define __USE_XOPEN2K because getpagesize()
+has gone away for mkfs.  I gave up and used sysconf.
+
+Also, something used to pull in stat that no longer does, so
+things like S_ISREG weren't getting defined.
+
+The following fixes things for me.
+
+Signed-off-by: Eric Sandeen <sandeen@redhat.com>
+---
+
+Index: btrfs-progs-0.19/btrfsck.c
+===================================================================
+--- btrfs-progs-0.19.orig/btrfsck.c
++++ btrfs-progs-0.19/btrfsck.c
+@@ -21,6 +21,9 @@
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <fcntl.h>
++#include <sys/types.h>
++#include <sys/stat.h>
++#include <unistd.h>
+ #include "kerncompat.h"
+ #include "ctree.h"
+ #include "disk-io.h"
+Index: btrfs-progs-0.19/mkfs.c
+===================================================================
+--- btrfs-progs-0.19.orig/mkfs.c
++++ btrfs-progs-0.19/mkfs.c
+@@ -341,7 +341,7 @@ int main(int ac, char **av)
+ 	u64 alloc_start = 0;
+ 	u64 metadata_profile = BTRFS_BLOCK_GROUP_RAID1 | BTRFS_BLOCK_GROUP_DUP;
+ 	u64 data_profile = BTRFS_BLOCK_GROUP_RAID0;
+-	u32 leafsize = getpagesize();
++	u32 leafsize = sysconf(_SC_PAGESIZE);
+ 	u32 sectorsize = 4096;
+ 	u32 nodesize = leafsize;
+ 	u32 stripesize = 4096;
+@@ -398,7 +398,7 @@ int main(int ac, char **av)
+ 				print_usage();
+ 		}
+ 	}
+-	sectorsize = max(sectorsize, (u32)getpagesize());
++	sectorsize = max(sectorsize, (u32)sysconf(_SC_PAGESIZE));
+ 	if (leafsize < sectorsize || (leafsize & (sectorsize - 1))) {
+ 		fprintf(stderr, "Illegal leafsize %u\n", leafsize);
+ 		exit(1);
+
+--
+To unsubscribe from this list: send the line "unsubscribe linux-btrfs" in
+the body of a message to majordomo@vger.kernel.org
+More majordomo info at  http://vger.kernel.org/majordomo-info.html
